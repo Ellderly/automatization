@@ -3,11 +3,12 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const cheerio = require('cheerio');
+const child_process = require('child_process');
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 3000;
 
 app.use(express.static('public'));
 
@@ -25,14 +26,21 @@ app.post('/upload', upload.array('files'), (req, res) => {
     });
 
     filePaths = flattenDirectories(filePaths);
+    const indexFile = path.join('uploads/', 'index.html');
+    if (filePaths.some(file => file.endsWith('.php'))) {
+        const phpFiles = filePaths.filter(file => file.endsWith('.php'));
+        phpFiles.forEach(file => {
+            child_process.execSync(`php ${file} > ${indexFile}`);
+        });
+    } else {
+        processFiles(indexFile, filePaths);
+    }
 
-    const indexPath = path.join('uploads/', 'index.html');
-    processFiles(indexPath, filePaths);
-    res.download(indexPath, 'index.html', function (err) {
+    res.download(indexFile, 'index.html', function (err) {
         if (err) {
             console.error(err);
         } else {
-            fs.unlinkSync(indexPath);
+            fs.unlinkSync(indexFile);
         }
     });
 });
@@ -47,6 +55,13 @@ function flattenDirectories(filePaths) {
 }
 
 function processFiles(indexPath, filePaths) {
+    filePaths.forEach(filePath => {
+        if (filePath.endsWith('.php')) {
+            const phpOutput = child_process.execSync(`php ${filePath}`);
+            fs.writeFileSync(filePath.replace('.php', '.html'), phpOutput);
+        }
+    });
+
     const $ = cheerio.load(fs.readFileSync(indexPath, 'utf-8'));
 
     $('link[rel="stylesheet"]').each(function () {
@@ -87,7 +102,6 @@ function processFiles(indexPath, filePaths) {
 
     fs.writeFileSync(indexPath, $.html());
 
-    // удаление всех файлов, кроме index.html и использованных изображений
     filePaths.forEach(filePath => {
         if (filePath !== indexPath && !imgFilePaths.includes(filePath)) {
             fs.unlinkSync(filePath);
