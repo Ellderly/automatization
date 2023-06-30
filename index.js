@@ -3,7 +3,6 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const cheerio = require('cheerio');
-const child_process = require('child_process');
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
@@ -27,28 +26,16 @@ app.post('/upload', upload.array('files'), (req, res) => {
 
     filePaths = flattenDirectories(filePaths);
 
-    const indexFilePath = filePaths.find(filePath => filePath.endsWith('index.html') || filePath.endsWith('index.php'));
-    if (!indexFilePath) {
-        res.status(400).send('index.html or index.php is not found in the uploaded files.');
-        return;
-    }
-
-    if (indexFilePath.endsWith('.php')) {
-        const output = child_process.execSync(`php ${indexFilePath}`);
-        fs.writeFileSync(indexFilePath.replace('.php', '.html'), output);
-    }
-
-    processFiles(indexFilePath.replace('.php', '.html'), filePaths);
-
-    res.download(indexFilePath.replace('.php', '.html'), 'index.html', function (err) {
+    const indexPath = filePaths.find(filePath => /(index\.html|index\.php)$/.test(filePath));
+    processFiles(indexPath, filePaths);
+    res.download(indexPath, path.basename(indexPath), function (err) {
         if (err) {
             console.error(err);
         } else {
-            fs.unlinkSync(indexFilePath.replace('.php', '.html'));
+            fs.unlinkSync(indexPath);
         }
     });
 });
-
 function flattenDirectories(filePaths) {
     return filePaths.map(filePath => {
         const fileName = path.basename(filePath);
@@ -58,14 +45,12 @@ function flattenDirectories(filePaths) {
     });
 }
 
-function processFiles(indexPath, filePaths) {
-    filePaths.forEach(filePath => {
-        if (filePath.endsWith('.php')) {
-            const phpOutput = child_process.execSync(`php ${filePath}`);
-            fs.writeFileSync(filePath.replace('.php', '.html'), phpOutput);
-        }
-    });
+function uncommentPhp(code) {
+    const phpCommentRegex = /<!--\?php(.+?)\?-->/gs;
+    return code.replace(phpCommentRegex, '<?php$1?>');
+}
 
+function processFiles(indexPath, filePaths) {
     const $ = cheerio.load(fs.readFileSync(indexPath, 'utf-8'));
 
     $('link[rel="stylesheet"]').each(function () {
@@ -106,6 +91,14 @@ function processFiles(indexPath, filePaths) {
 
     fs.writeFileSync(indexPath, $.html());
 
+    let html = $.html();
+
+    // Uncomment PHP code
+    html = uncommentPhp(html);
+
+    fs.writeFileSync(indexPath, html);
+
+    // удаление всех файлов, кроме index.html и использованных изображений
     filePaths.forEach(filePath => {
         if (filePath !== indexPath && !imgFilePaths.includes(filePath)) {
             fs.unlinkSync(filePath);
