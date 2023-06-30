@@ -26,21 +26,25 @@ app.post('/upload', upload.array('files'), (req, res) => {
     });
 
     filePaths = flattenDirectories(filePaths);
-    const indexFile = path.join('uploads/', 'index.html');
-    if (filePaths.some(file => file.endsWith('.php'))) {
-        const phpFiles = filePaths.filter(file => file.endsWith('.php'));
-        phpFiles.forEach(file => {
-            child_process.execSync(`php ${file} > ${indexFile}`);
-        });
-    } else {
-        processFiles(indexFile, filePaths);
+
+    const indexFilePath = filePaths.find(filePath => filePath.endsWith('index.html') || filePath.endsWith('index.php'));
+    if (!indexFilePath) {
+        res.status(400).send('index.html or index.php is not found in the uploaded files.');
+        return;
     }
 
-    res.download(indexFile, 'index.html', function (err) {
+    if (indexFilePath.endsWith('.php')) {
+        const output = child_process.execSync(`php ${indexFilePath}`);
+        fs.writeFileSync(indexFilePath.replace('.php', '.html'), output);
+    }
+
+    processFiles(indexFilePath.replace('.php', '.html'), filePaths);
+
+    res.download(indexFilePath.replace('.php', '.html'), 'index.html', function (err) {
         if (err) {
             console.error(err);
         } else {
-            fs.unlinkSync(indexFile);
+            fs.unlinkSync(indexFilePath.replace('.php', '.html'));
         }
     });
 });
