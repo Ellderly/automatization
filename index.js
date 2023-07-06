@@ -36,6 +36,7 @@ app.post('/upload', upload.array('files'), (req, res) => {
         }
     });
 });
+
 function flattenDirectories(filePaths) {
     return filePaths.map(filePath => {
         const fileName = path.basename(filePath);
@@ -53,19 +54,16 @@ function uncommentPhp(code) {
     });
 }
 
-
-
 function processFiles(indexPath, filePaths) {
     const $ = cheerio.load(fs.readFileSync(indexPath, 'utf-8'), {
         decodeEntities: false
     });
 
-
     $('link[rel="stylesheet"]').each(function () {
-        let content = replaceContentWithFile('uploads/', $(this).attr('href'), $(this), `<style>\n%s\n</style>`);
+        const content = replaceContentWithFile('uploads/', $(this).attr('href'));
         if (content) {
-            $(this).removeAttr('href');
-            $(this).html(content);
+            $('head').append('<style>\n' + content + '\n</style>');
+            $(this).remove();
         }
     });
 
@@ -85,10 +83,10 @@ function processFiles(indexPath, filePaths) {
     });
 
     $('script[src]').each(function () {
-        let content = replaceContentWithFile('uploads/', $(this).attr('src'), $(this), `<script>\n%s\n</script>`);
+        const content = replaceContentWithFile('uploads/', $(this).attr('src'));
         if (content) {
-            $(this).removeAttr('src');
-            $(this).html(content);
+            $('head').append('<script>\n' + content + '\n</script>');
+            $(this).remove();
         }
     });
 
@@ -101,7 +99,6 @@ function processFiles(indexPath, filePaths) {
             imgFilePaths.push(path.join('uploads/', path.basename(imgPath)));
         }
     });
-
     fs.writeFileSync(indexPath, $.html());
 
     let html = $.html();
@@ -120,11 +117,10 @@ function processFiles(indexPath, filePaths) {
 
 }
 
-function replaceContentWithFile(basePath, relativePath, element, template) {
+function replaceContentWithFile(basePath, relativePath) {
     const fullPath = path.join(basePath, path.basename(relativePath));
     if (fs.existsSync(fullPath)) {
         const content = fs.readFileSync(fullPath, 'utf-8');
-        element.replaceWith(template.replace('%s', content));
         return content;
     }
     return null;
