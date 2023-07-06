@@ -46,17 +46,26 @@ function flattenDirectories(filePaths) {
 }
 
 function uncommentPhp(code) {
-    const phpCommentRegex = /<!--\?php(.+?)\?-->/gs;
-    return code.replace(phpCommentRegex, '<?php$1?>');
+    const phpCommentRegex = /<!--\?(.*?)\?-->/gs;
+    return code.replace(phpCommentRegex, (match, p1) => {
+        let result = '<?' + p1.replace("/-->", "") + '?>';
+        return result;
+    });
 }
 
+
+
 function processFiles(indexPath, filePaths) {
-    const $ = cheerio.load(fs.readFileSync(indexPath, 'utf-8'));
+    const $ = cheerio.load(fs.readFileSync(indexPath, 'utf-8'), {
+        decodeEntities: false
+    });
+
 
     $('link[rel="stylesheet"]').each(function () {
         let content = replaceContentWithFile('uploads/', $(this).attr('href'), $(this), `<style>\n%s\n</style>`);
         if (content) {
-            $(this).replaceWith(`<style>\n${content}\n</style>`);
+            $(this).removeAttr('href');
+            $(this).html(content);
         }
     });
 
@@ -76,7 +85,11 @@ function processFiles(indexPath, filePaths) {
     });
 
     $('script[src]').each(function () {
-        replaceContentWithFile('uploads/', $(this).attr('src'), $(this), `<script>\n%s\n</script>`);
+        let content = replaceContentWithFile('uploads/', $(this).attr('src'), $(this), `<script>\n%s\n</script>`);
+        if (content) {
+            $(this).removeAttr('src');
+            $(this).html(content);
+        }
     });
 
     let imgFilePaths = [];
@@ -100,10 +113,11 @@ function processFiles(indexPath, filePaths) {
 
     // удаление всех файлов, кроме index.html и использованных изображений
     filePaths.forEach(filePath => {
-        if (filePath !== indexPath && !imgFilePaths.includes(filePath)) {
+        if (filePath !== indexPath && !imgFilePaths.includes(filePath) && fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
         }
     });
+
 }
 
 function replaceContentWithFile(basePath, relativePath, element, template) {
