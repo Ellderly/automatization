@@ -53,6 +53,23 @@ function uncommentPhp(code) {
         return result;
     });
 }
+function fixHeadContent(html) {
+    const $ = cheerio.load(html, {
+        decodeEntities: false
+    });
+
+    const headContent = ['base', 'meta', 'title', 'link', 'style', 'script'];
+    headContent.forEach(tagName => {
+        $(tagName).each(function () {
+            if($(this).parent().is('body')) {
+                $('head').append($(this));
+            }
+        });
+    });
+
+    return $.html();
+}
+
 
 function processFiles(indexPath, filePaths) {
     const $ = cheerio.load(fs.readFileSync(indexPath, 'utf-8'), {
@@ -104,7 +121,9 @@ function processFiles(indexPath, filePaths) {
     let html = $.html();
 
     // Uncomment PHP code
-    html = uncommentPhp(html);
+    // html = uncommentPhp(html);
+
+    html = fixHeadContent(html);
 
     fs.writeFileSync(indexPath, html);
 
